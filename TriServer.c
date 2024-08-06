@@ -1,3 +1,6 @@
+// ========================================
+// HEADER
+// ========================================
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -13,8 +16,32 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 
+#define N 3
+
+// ========================================
+// STRUCT FOR THE SHARED MEMORY
+// ========================================
+typedef struct CampoCondiviso{
+    
+    char campo[N][N];
+    char turno;
+    int timeout;
+
+}CampoCondiviso;
+
+CampoCondiviso *campoCondiviso;
 
 
+// ========================================
+// FUNCTIONS
+// ========================================
+
+
+
+
+// ========================================
+// MAIN
+// ========================================
 int main(int argc, char *argv[]){
 
     //checking that the number of parameters is correct
@@ -41,11 +68,7 @@ int main(int argc, char *argv[]){
     char segno2 = *argv[3];
 
 
-
-
-
     return 0;
 }
-
 
 
