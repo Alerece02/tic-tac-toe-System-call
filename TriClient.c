@@ -16,4 +16,13 @@
 
 int main(int argc, char *argv[]){
 
+    if(argc != 2){
+        perror("Non hai inserito il numero corretto di parametri!\n");
+        exit(0);
+    }
+
+    
+
+
+    return 0;
 }
