@@ -1,3 +1,6 @@
+// ========================================
+// HEADER
+// ========================================
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -16,6 +19,9 @@
 
 #define N 3
 
+// ========================================
+// STRUCT FOR THE SHARED MEMORY
+// ========================================
 typedef struct CampoCondiviso{
     
     char campo[N][N];
@@ -26,8 +32,17 @@ typedef struct CampoCondiviso{
 
 CampoCondiviso *campoCondiviso;
 
+
+// ========================================
+// FUNCTIONS
+// ========================================
+
 void stampaCampo();
 
+
+// ========================================
+// MAIN
+// ========================================
 int main(int argc, char *argv[]){
 
     if(argc != 2){
@@ -35,13 +50,13 @@ int main(int argc, char *argv[]){
         exit(0);
     }
 
-    
-
-
     return 0;
 }
 
 
+// ========================================
+// PRINT FIELD
+// ========================================
 void stampaCampo(){
 
     for (int i = 0; i < N; i++){
@@ -58,3 +73,4 @@ void stampaCampo(){
         }
     }
 }
+
