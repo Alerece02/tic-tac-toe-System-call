@@ -10,7 +10,6 @@
 #include <sys/shm.h>
 #include <sys/sem.h>
 
-// Definizione delle chiavi univoche per la memoria condivisa e per i semafori
 #define SHM_KEY 1303
 #define SEM_KEY 2210
 
@@ -18,39 +17,39 @@
 *                                  STRUCTURE E VARIABILI GLOBALI                          *
 ******************************************************************************************/
 
-// Struttura che rappresenta lo stato del gioco e la comunicazione tra processi
 struct GameBoard {
-    char grid[3][3];        // La griglia di gioco 3x3
-    char token;             // Il token corrente del giocatore ('X' o 'O')
-    int playerCount;        // Numero di giocatori connessi al server
-    int move;               // Ultima mossa effettuata
-    pid_t player1;          // PID del primo giocatore
-    pid_t player2;          // PID del secondo giocatore
-    pid_t serverPid;        // PID del server
+    char grid[3][3];        
+    char token;             
+    int playerCount;        
+    int move;               
+    pid_t player1;          
+    pid_t player2;          
+    pid_t serverPid;        
 };
 
-// Puntatore alla memoria condivisa
 struct GameBoard *shared_memory;
 
-bool isTurnPlayer1 = true;  // Indica se è il turno del primo giocatore
-bool signalStatus = true;   // Controlla lo stato del segnale
-int semaphoreId;            // ID del set di semafori
-int sharedMemoryId;         // ID della memoria condivisa
+bool isTurnPlayer1 = true;  
+bool signalStatus = true;   
+int semaphoreId;            
+int sharedMemoryId;         
+int timeout;                // Timeout in secondi
 
 /*****************************************************************************************
 *                                DICHIARAZIONE DELLE FUNZIONI                             *
 ******************************************************************************************/
 
-void initializeBoard();        // Inizializza la griglia di gioco
-void establishConnection();    // Stabilisce la connessione alla memoria condivisa e ai semafori
-void handleError(const char *message);  // Gestisce gli errori
-void modifySemaphore(int semid, unsigned short sem_num, short sem_op);  // Modifica lo stato di un semaforo
-void switchTurnAndToken(char token1, char token2);  // Cambia il turno e il token
-void placeToken();             // Posiziona il token sulla griglia
-int checkGameStatus();         // Controlla lo stato del gioco (vittoria, pareggio)
-void terminateServer();        // Termina il server e rilascia le risorse
-void signalHandler(int sig);   // Gestisce i segnali
-void printError(const char *message, bool mode);  // Stampa errori
+void initializeBoard();        
+void establishConnection();    
+void handleError(const char *message);  
+void modifySemaphore(int semid, unsigned short sem_num, short sem_op);  
+void switchTurnAndToken(char token1, char token2);  
+void placeToken();             
+int checkGameStatus();         
+void terminateServer();        
+void signalHandler(int sig);   
+void handleTimeout();          // Gestisce il timeout per le mosse
+void printError(const char *message, bool mode);  
 
 /*****************************************************************************************
 *                                         MAIN                                           *
@@ -58,21 +57,22 @@ void printError(const char *message, bool mode);  // Stampa errori
 
 int main(int argc, char *argv[]) {
 
-    if (argc != 3) {
-        printError("Usage error: ./TrisServer <token1> <token2>\n", false);
+    if (argc != 4) {
+        printError("Usage error: ./TrisServer <timeout> <token1> <token2>\n", false);
     }
 
-    char token1 = *argv[1];
-    char token2 = *argv[2];
+    timeout = atoi(argv[1]);
+    char token1 = *argv[2];
+    char token2 = *argv[3];
 
     if (token1 == token2) {
         printError("Error: You have entered two identical tokens!\n", false);
     }
 
-    establishConnection();  // Stabilisce la connessione con la memoria condivisa e i semafori
-    initializeBoard();      // Inizializza la griglia di gioco
+    establishConnection();  
+    initializeBoard();      
 
-    shared_memory->token = token1;  // Imposta il primo token
+    shared_memory->token = token1;  
 
     printf("Waiting for the first player to connect...\n");
     modifySemaphore(semaphoreId, 3, 1); 
@@ -88,17 +88,17 @@ int main(int argc, char *argv[]) {
 
     int gameStatus = 0;
 
-    // Ciclo principale del gioco
     while (gameStatus == 0) { 
-        modifySemaphore(semaphoreId, 0, -1);  // Attende una mossa
+        alarm(timeout);  // Imposta il timeout
+        modifySemaphore(semaphoreId, 0, -1);  
+        alarm(0);  // Disabilita l'allarme se la mossa è stata effettuata in tempo
         placeToken();  
-        gameStatus = checkGameStatus();  // Controlla lo stato del gioco
+        gameStatus = checkGameStatus();  
         if (gameStatus == 0) {
-            switchTurnAndToken(token1, token2);  // Cambia il turno
+            switchTurnAndToken(token1, token2);  
         }
     } 
 
-    // Gestisce la fine del gioco
     if (gameStatus == 2) {
         printf("It's a draw!\n");
         shared_memory->move = -3;
@@ -124,14 +124,13 @@ int main(int argc, char *argv[]) {
 ******************************************************************************************/
 
 void initializeBoard() {
-    // Inizializza la griglia di gioco con spazi vuoti
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             shared_memory->grid[i][j] = ' ';
         }
     }
 
-    shared_memory->playerCount = 0;  // Inizializza il numero di giocatori a 0
+    shared_memory->playerCount = 0;  
     if ((shared_memory->serverPid = getpid()) == -1) {
         handleError("Error: getpid failed!");
     }
@@ -142,24 +141,20 @@ void initializeBoard() {
 ******************************************************************************************/
 
 void establishConnection() {
-    // Creazione della memoria condivisa per gestire lo stato del gioco
     sharedMemoryId = shmget(SHM_KEY, sizeof(struct GameBoard), IPC_EXCL | IPC_CREAT | 0666);
     if (sharedMemoryId == -1) {
         printError("Error: shmget failed!\n", true);
     }
 
-    // Collegamento alla memoria condivisa
     shared_memory = (struct GameBoard*)shmat(sharedMemoryId, NULL, 0);
     if (shared_memory == (struct GameBoard *)-1) {
         printError("Error: shmat failed!\n", true);
     }
 
-    // Gestione dei segnali per interrompere il gioco in caso di necessità
-    if (signal(SIGUSR2, signalHandler) == SIG_ERR || signal(SIGINT, signalHandler) == SIG_ERR || signal(SIGUSR1, signalHandler) == SIG_ERR || signal(SIGTERM, signalHandler) == SIG_ERR) {
+    if (signal(SIGUSR2, signalHandler) == SIG_ERR || signal(SIGINT, signalHandler) == SIG_ERR || signal(SIGUSR1, signalHandler) == SIG_ERR || signal(SIGTERM, signalHandler) == SIG_ERR || signal(SIGALRM, signalHandler) == SIG_ERR) {
         printError("Error: Signal initialization failed!", true);
     }
 
-    // Creazione del set di semafori per la sincronizzazione tra processi
     unsigned short semInitVal[] = {0, 0, 0, 0};
     union semun {
         int val;
@@ -171,7 +166,6 @@ void establishConnection() {
     if (semaphoreId == -1)
         handleError("Error: semget failed!");
 
-    // Inizializza i semafori con i valori iniziali
     if (semctl(semaphoreId, 0, SETALL, arg) == -1)
         handleError("Error: semctl failed!");
 }
@@ -180,23 +174,14 @@ void establishConnection() {
 *                                  MODIFICA DEI SEMAFORI                                 *
 ******************************************************************************************/
 
-/**
- * @brief Modifica il valore di un semaforo all'interno di un set
- * 
- * @param semid ID del set di semafori
- * @param sem_num Indice del semaforo nel set
- * @param sem_op Operazione da effettuare sul semaforo (es. -1 per wait, 1 per signal)
- */
 void modifySemaphore(int semid, unsigned short sem_num, short sem_op) {
     struct sembuf sop = {.sem_num = sem_num, .sem_op = sem_op, .sem_flg = 0};
     bool interrupted = false;
 
-    // Effettua l'operazione sul semaforo gestendo eventuali interruzioni (errno == EINTR)
     while (semop(semid, &sop, 1) == -1 && errno == EINTR) {
         interrupted = true;
     }
 
-    // Se l'errore non è stato un'interruzione, gestisce l'errore
     if (errno != EINTR && interrupted) {
         handleError("Error: semop failed");
     }
@@ -206,35 +191,25 @@ void modifySemaphore(int semid, unsigned short sem_num, short sem_op) {
 *                                CAMBIO TURNO E TOKEN                                   *
 ******************************************************************************************/
 
-/**
- * @brief Cambia il turno e il token tra i due giocatori
- * 
- * @param token1 Il token del primo giocatore
- * @param token2 Il token del secondo giocatore
- */
 void switchTurnAndToken(char token1, char token2) {
     if (isTurnPlayer1) {
-        modifySemaphore(semaphoreId, 2, 1);  // Sblocca il secondo giocatore
+        modifySemaphore(semaphoreId, 2, 1);  
     } else {
-        modifySemaphore(semaphoreId, 1, 1);  // Sblocca il primo giocatore
+        modifySemaphore(semaphoreId, 1, 1);  
     }
-    isTurnPlayer1 = !isTurnPlayer1;  // Cambia il turno
-    shared_memory->token = isTurnPlayer1 ? token1 : token2;  // Imposta il token corretto per il prossimo turno
+    isTurnPlayer1 = !isTurnPlayer1;  
+    shared_memory->token = isTurnPlayer1 ? token1 : token2;  
 }
 
 /*****************************************************************************************
 *                                 INSERIMENTO DEL TOKEN                                  *
 ******************************************************************************************/
 
-/**
- * @brief Posiziona il token sulla griglia in base alla mossa effettuata
- */
 void placeToken() {
-    int pos = shared_memory->move;  // Ottiene la posizione della mossa
-    int row = pos / 3;  // Calcola la riga
-    int col = pos % 3;  // Calcola la colonna
+    int pos = shared_memory->move;  
+    int row = pos / 3;  
+    int col = pos % 3;  
 
-    // Controlla se la posizione è valida (non occupata) e piazza il token
     if (shared_memory->grid[row][col] == ' ') {
         shared_memory->grid[row][col] = shared_memory->token;
         printf("Player '%c' made a move at [%d, %d]\n", shared_memory->token, row + 1, col + 1);
@@ -247,74 +222,62 @@ void placeToken() {
 *                                 CONTROLLO DELLO STATO                                  *
 ******************************************************************************************/
 
-/**
- * @brief Controlla se c'è un vincitore o se la partita è un pareggio
- * 
- * @return 1 se c'è un vincitore, 2 se è un pareggio, 0 se la partita continua
- */
 int checkGameStatus() {
 
-    bool isDraw = true;  // Assume che la partita sia un pareggio
+    bool isDraw = true;  
 
-    // Controlla se ci sono ancora spazi vuoti sulla griglia
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             if (shared_memory->grid[i][j] == ' ') {
-                isDraw = false;  // Non è un pareggio se c'è almeno un spazio vuoto
+                isDraw = false;  
             }
         }
     }
 
-    // Se è un pareggio, restituisce 2
     if (isDraw) {
         return 2; 
     } else {
-        // Controllo delle righe per determinare una vittoria
         for (int i = 0; i < 3; i++) {
             if (shared_memory->grid[i][0] == shared_memory->token &&
                 shared_memory->grid[i][1] == shared_memory->token &&
                 shared_memory->grid[i][2] == shared_memory->token) {
-                return 1;  // C'è un vincitore
+                return 1;  
             }
         }
 
-        // Controllo delle colonne per determinare una vittoria
         for (int j = 0; j < 3; j++) {
             if (shared_memory->grid[0][j] == shared_memory->token &&
                 shared_memory->grid[1][j] == shared_memory->token &&
                 shared_memory->grid[2][j] == shared_memory->token) {
-                return 1;  // C'è un vincitore
+                return 1;  
             }
         }
 
-        // Controllo delle diagonali per determinare una vittoria
         if (shared_memory->grid[0][0] == shared_memory->token &&
             shared_memory->grid[1][1] == shared_memory->token &&
             shared_memory->grid[2][2] == shared_memory->token) {
-            return 1;  // C'è un vincitore
+            return 1;  
         }
 
         if (shared_memory->grid[0][2] == shared_memory->token &&
             shared_memory->grid[1][1] == shared_memory->token &&
             shared_memory->grid[2][0] == shared_memory->token) {
-            return 1;  // C'è un vincitore
+            return 1;  
         }
     }
 
-    return 0;  // La partita continua
+    return 0;  
 }
 
 /*****************************************************************************************
 *                               GESTORE DEI SEGNALI                                     *
 ******************************************************************************************/
 
-/**
- * @brief Gestisce i segnali per interrompere o terminare il gioco
- * 
- * @param sig Il segnale ricevuto
- */
 void signalHandler(int sig) {
     switch (sig) { 
+        case SIGALRM:
+            handleTimeout();  // Gestisce il timeout
+            break;
         case SIGTERM:
         case SIGINT:
             if (signalStatus) {
@@ -362,16 +325,13 @@ void signalHandler(int sig) {
 ******************************************************************************************/
 
 void terminateServer() {
-    // Distacco della memoria condivisa
     if (shmdt(shared_memory) == -1) {
         handleError("Error: shmdt failed!\n");
     }
 
-    // Rimozione della memoria condivisa
     if (shmctl(sharedMemoryId, IPC_RMID, NULL) == -1)
         handleError("Error: shmctl failed!\n");
 
-    // Rimozione dei semafori
     if (semctl(semaphoreId, 0, IPC_RMID, 0) == -1)
         handleError("Error: semctl failed!\n");
 
@@ -383,12 +343,6 @@ void terminateServer() {
 *                                GESTIONE ERRORI                                        *
 ******************************************************************************************/
 
-/**
- * @brief Stampa un errore e termina il programma
- * 
- * @param message Messaggio di errore
- * @param mode Se true, usa perror; se false, usa printf
- */
 void printError(const char *message, bool mode) {
     if (mode) {
         perror(message);
@@ -399,14 +353,30 @@ void printError(const char *message, bool mode) {
     }
 }
 
-/**
- * @brief Gestisce errori critici terminando il server
- * 
- * @param message Messaggio di errore
- */
 void handleError(const char *message) {
     perror(message);
     kill(shared_memory->player1, SIGUSR2);
     kill(shared_memory->player2, SIGUSR2);
     terminateServer();
 }
+
+/*****************************************************************************************
+*                              GESTIONE DEL TIMEOUT                                     *
+******************************************************************************************/
+
+void handleTimeout() {
+    printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->token);
+    if (isTurnPlayer1) {
+        shared_memory->move = -2;  // Giocatore 2 vince
+        kill(shared_memory->player2, SIGUSR1);  // Avvisa il giocatore 2 della vittoria
+        kill(shared_memory->player1, SIGUSR2);  // Avvisa il giocatore 1 della sconfitta
+    } else {
+        shared_memory->move = -1;  // Giocatore 1 vince
+        kill(shared_memory->player1, SIGUSR1);  // Avvisa il giocatore 1 della vittoria
+        kill(shared_memory->player2, SIGUSR2);  // Avvisa il giocatore 2 della sconfitta
+    }
+    modifySemaphore(semaphoreId, 2, 1);
+    modifySemaphore(semaphoreId, 1, 1);
+    terminateServer();
+}
+
