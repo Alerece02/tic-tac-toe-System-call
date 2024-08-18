@@ -9,7 +9,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
-#include <time.h>  // Aggiunto per generare numeri casuali
+#include <time.h>
 
 #define SHM_KEY 1303
 #define SEM_KEY 2210
@@ -65,16 +65,29 @@ int main(int argc, char *argv[]) {
         printError("Usage error: ./TrisClient <playerName> [*]\n", false);
     }
 
-    // Identificare se il client è un bot
-    if (argc == 3 && strcmp(argv[2], "*") == 0) {
-        isBot = true;
-    }
-
     char playerName[MAX_PLAYER_NAME];
     strncpy(playerName, argv[1], MAX_PLAYER_NAME);
 
     if (strlen(playerName) > 100) {
         printError("Error: Player name is too long! MAX CHARACTERS 100!\n", false);
+    }
+
+    if (argc == 3 && strcmp(argv[2], "*") == 0) {
+        // Creazione di un processo figlio per il bot
+        pid_t pid = fork();
+
+        if (pid < 0) {
+            handleError("Error: fork failed!\n");
+        } else if (pid == 0) {
+            // Processo figlio - Bot
+            isBot = true;
+            printf("Bot mode activated. Playing automatically...\n");
+            srand(time(NULL));  // Inizializza il generatore di numeri casuali
+        } else {
+            // Processo padre - Continua come client normale
+            printf("Bot process started with PID: %d\n", pid);
+            exit(EXIT_SUCCESS);  // Termina il processo padre dopo aver avviato il bot
+        }
     }
 
     if (signal(SIGUSR2, signalHandler) == SIG_ERR || signal(SIGINT, signalHandler) == SIG_ERR || signal(SIGUSR1, signalHandler) == SIG_ERR || signal(SIGTERM, signalHandler) == SIG_ERR) {
@@ -119,15 +132,10 @@ int main(int argc, char *argv[]) {
         modifySemaphore(semaphoreId, 1, 1);  
         modifySemaphore(semaphoreId, 2, -1);  
     }
-    
-    if (isBot) {
-        printf("Bot mode activated. Playing automatically...\n");
-        srand(time(NULL));  // Inizializza il generatore di numeri casuali
-    }
 
     playGame();  
     endGame();  
-        
+
     printf("Game over!\n");
     closeClient();
 }
@@ -231,17 +239,14 @@ void makeRandomMove() {
         
         if (shared_memory->grid[row][col] != ' ') {
             invalidMove = true;
+        } else {
+            shared_memory->move = pos - 1;  // Aggiorna la mossa effettiva nella shared memory
         }
     } while (invalidMove);
 
-    shared_memory->move = pos - 1;
-    shared_memory->grid[(pos - 1) / 3][(pos - 1) % 3] = shared_memory->token;  // Aggiorna la griglia con il token del bot
-
     printf("Bot placed a token at position %d\n", pos);
-    
-    // Stampa la griglia per debug
-    printf("Grid after bot's move:\n");
-    printBoard();
+
+    // Lascia al server il compito di aggiornare la griglia
 }
 
 void waitForTurn() {
@@ -314,23 +319,8 @@ void signalHandler(int sig) {
     switch (sig) {
         case SIGTERM:
         case SIGINT:
-            if (player == 1) {
-                printf("\nYou have left the game.\n");
-                kill(shared_memory->serverPid, SIGUSR1);      
-                closeClient();
-            } else if (player == 2) {
-                printf("\nYou have left the game.\n");
-                kill(shared_memory->serverPid, SIGUSR2);
-                closeClient();
-            } else {            
-                if (semctl(semaphoreId, 0, IPC_RMID, 0) == -1) {
-                    handleError("Error: semctl failed!\n");
-                }
-                exit(EXIT_SUCCESS);
-            }
-            break;
         case SIGUSR1:
-            printf("\nThe opponent has left the game.\n You win!\n");
+            printf("\nThe game has ended. Exiting...\n");
             closeClient();
             break;
         case SIGUSR2:

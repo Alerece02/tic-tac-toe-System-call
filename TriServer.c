@@ -317,6 +317,13 @@ void signalHandler(int sig) {
 ******************************************************************************************/
 
 void terminateServer() {
+    if (shared_memory->playerCount > 0) {
+        kill(shared_memory->player1, SIGUSR1); // Invia il segnale di terminazione al primo player
+        if (shared_memory->playerCount > 1) {
+            kill(shared_memory->player2, SIGUSR1); // Invia il segnale di terminazione al secondo player
+        }
+    }
+
     if (shmdt(shared_memory) == -1) {
         handleError("Error: shmdt failed!\n");
     }
@@ -330,6 +337,8 @@ void terminateServer() {
     printf("Game over.\n");
     exit(EXIT_SUCCESS);
 }
+
+
 
 /*****************************************************************************************
 *                                GESTIONE ERRORI                                        *
