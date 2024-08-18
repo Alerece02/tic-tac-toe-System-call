@@ -9,6 +9,7 @@
 #include <sys/ipc.h>
 #include <sys/shm.h>
 #include <sys/sem.h>
+#include <time.h>  // Aggiunto per generare numeri casuali
 
 #define SHM_KEY 1303
 #define SEM_KEY 2210
@@ -34,6 +35,7 @@ struct semid_ds sem_info;
 int semaphoreId, sharedMemoryId; 
 int player = 0;                  
 bool noError = true;             
+bool isBot = false;  // Aggiunto per identificare se il client è un bot
 
 /*****************************************************************************************
 *                                DICHIARAZIONE DELLE FUNZIONI                             *
@@ -44,6 +46,7 @@ void initializeSemaphores();
 void modifySemaphore(int semid, unsigned short sem_num, short sem_op);  
 void closeClient();  
 void makeMove();  
+void makeRandomMove();  // Aggiunto per il bot
 void waitForTurn();  
 void playGame();  
 void printBoard();  
@@ -58,13 +61,18 @@ void printError(const char *message, bool mode);
 
 int main(int argc, char *argv[]) {
 
-    if (argc < 2) {
-        printError("Usage error: ./TrisClient <playerName>\n", false);
+    if (argc < 2 || argc > 3) {
+        printError("Usage error: ./TrisClient <playerName> [*]\n", false);
+    }
+
+    // Identificare se il client è un bot
+    if (argc == 3 && strcmp(argv[2], "*") == 0) {
+        isBot = true;
     }
 
     char playerName[MAX_PLAYER_NAME];
     strncpy(playerName, argv[1], MAX_PLAYER_NAME);
-    
+
     if (strlen(playerName) > 100) {
         printError("Error: Player name is too long! MAX CHARACTERS 100!\n", false);
     }
@@ -112,6 +120,11 @@ int main(int argc, char *argv[]) {
         modifySemaphore(semaphoreId, 2, -1);  
     }
     
+    if (isBot) {
+        printf("Bot mode activated. Playing automatically...\n");
+        srand(time(NULL));  // Inizializza il generatore di numeri casuali
+    }
+
     playGame();  
     endGame();  
         
@@ -127,7 +140,13 @@ void playGame() {
     while (shared_memory->move >= 0) { 
         system("clear");    
         printBoard();      
-        makeMove();         
+
+        if (isBot && ((player == 1 && shared_memory->token == 'X') || (player == 2 && shared_memory->token == 'O'))) {
+            makeRandomMove();  // Il bot fa una mossa casuale
+        } else {
+            makeMove();  // Mossa manuale per il giocatore umano
+        }
+
         waitForTurn();      
     }
 }
@@ -196,6 +215,33 @@ void makeMove() {
     } while (invalidMove);
     
     shared_memory->move = pos - 1;  
+}
+
+// Funzione per fare una mossa casuale (per il bot)
+void makeRandomMove() {
+    int pos;
+    bool invalidMove = false;
+
+    printf("Bot is making a move...\n");
+    do {
+        invalidMove = false;
+        pos = rand() % 9 + 1;  // Genera un numero casuale tra 1 e 9
+        int row = (pos - 1) / 3;
+        int col = (pos - 1) % 3;
+        
+        if (shared_memory->grid[row][col] != ' ') {
+            invalidMove = true;
+        }
+    } while (invalidMove);
+
+    shared_memory->move = pos - 1;
+    shared_memory->grid[(pos - 1) / 3][(pos - 1) % 3] = shared_memory->token;  // Aggiorna la griglia con il token del bot
+
+    printf("Bot placed a token at position %d\n", pos);
+    
+    // Stampa la griglia per debug
+    printf("Grid after bot's move:\n");
+    printBoard();
 }
 
 void waitForTurn() {
@@ -293,7 +339,6 @@ void signalHandler(int sig) {
             break;
     }
 }
-
 
 /*****************************************************************************************
 *                                    GESTIONE ERRORI                                     *

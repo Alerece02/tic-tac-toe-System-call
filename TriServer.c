@@ -33,7 +33,7 @@ bool isTurnPlayer1 = true;
 bool signalStatus = true;   
 int semaphoreId;            
 int sharedMemoryId;         
-int timeout;                // Timeout in secondi
+int timeout;                
 
 /*****************************************************************************************
 *                                DICHIARAZIONE DELLE FUNZIONI                             *
@@ -48,7 +48,7 @@ void placeToken();
 int checkGameStatus();         
 void terminateServer();        
 void signalHandler(int sig);   
-void handleTimeout();          // Gestisce il timeout per le mosse
+void handleTimeout();          
 void printError(const char *message, bool mode);  
 
 /*****************************************************************************************
@@ -89,9 +89,9 @@ int main(int argc, char *argv[]) {
     int gameStatus = 0;
 
     while (gameStatus == 0) { 
-        alarm(timeout);  // Imposta il timeout
+        alarm(timeout);  
         modifySemaphore(semaphoreId, 0, -1);  
-        alarm(0);  // Disabilita l'allarme se la mossa è stata effettuata in tempo
+        alarm(0);  
         placeToken();  
         gameStatus = checkGameStatus();  
         if (gameStatus == 0) {
@@ -224,49 +224,41 @@ void placeToken() {
 
 int checkGameStatus() {
 
-    bool isDraw = true;  
+    // Controllo righe e colonne per una vittoria
+    for (int i = 0; i < 3; i++) {
+        if (shared_memory->grid[i][0] == shared_memory->token &&
+            shared_memory->grid[i][1] == shared_memory->token &&
+            shared_memory->grid[i][2] == shared_memory->token) {
+            return 1;  // Vittoria
+        }
 
+        if (shared_memory->grid[0][i] == shared_memory->token &&
+            shared_memory->grid[1][i] == shared_memory->token &&
+            shared_memory->grid[2][i] == shared_memory->token) {
+            return 1;  // Vittoria
+        }
+    }
+
+    // Controllo le diagonali per una vittoria
+    if ((shared_memory->grid[0][0] == shared_memory->token &&
+         shared_memory->grid[1][1] == shared_memory->token &&
+         shared_memory->grid[2][2] == shared_memory->token) ||
+        (shared_memory->grid[0][2] == shared_memory->token &&
+         shared_memory->grid[1][1] == shared_memory->token &&
+         shared_memory->grid[2][0] == shared_memory->token)) {
+        return 1;  // Vittoria
+    }
+
+    // Controllo se c'è ancora spazio per giocare
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             if (shared_memory->grid[i][j] == ' ') {
-                isDraw = false;  
+                return 0;  // Gioco ancora in corso
             }
         }
     }
 
-    if (isDraw) {
-        return 2; 
-    } else {
-        for (int i = 0; i < 3; i++) {
-            if (shared_memory->grid[i][0] == shared_memory->token &&
-                shared_memory->grid[i][1] == shared_memory->token &&
-                shared_memory->grid[i][2] == shared_memory->token) {
-                return 1;  
-            }
-        }
-
-        for (int j = 0; j < 3; j++) {
-            if (shared_memory->grid[0][j] == shared_memory->token &&
-                shared_memory->grid[1][j] == shared_memory->token &&
-                shared_memory->grid[2][j] == shared_memory->token) {
-                return 1;  
-            }
-        }
-
-        if (shared_memory->grid[0][0] == shared_memory->token &&
-            shared_memory->grid[1][1] == shared_memory->token &&
-            shared_memory->grid[2][2] == shared_memory->token) {
-            return 1;  
-        }
-
-        if (shared_memory->grid[0][2] == shared_memory->token &&
-            shared_memory->grid[1][1] == shared_memory->token &&
-            shared_memory->grid[2][0] == shared_memory->token) {
-            return 1;  
-        }
-    }
-
-    return 0;  
+    return 2;  // Pareggio
 }
 
 /*****************************************************************************************
@@ -276,7 +268,7 @@ int checkGameStatus() {
 void signalHandler(int sig) {
     switch (sig) { 
         case SIGALRM:
-            handleTimeout();  // Gestisce il timeout
+            handleTimeout();  
             break;
         case SIGTERM:
         case SIGINT:
@@ -368,15 +360,14 @@ void handleTimeout() {
     printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->token);
     if (isTurnPlayer1) {
         shared_memory->move = -2;  // Giocatore 2 vince
-        kill(shared_memory->player2, SIGUSR1);  // Avvisa il giocatore 2 della vittoria
-        kill(shared_memory->player1, SIGUSR2);  // Avvisa il giocatore 1 della sconfitta
+        kill(shared_memory->player2, SIGUSR1);  
+        kill(shared_memory->player1, SIGUSR2);  
     } else {
-        shared_memory->move = -1;  // Giocatore 1 vince
-        kill(shared_memory->player1, SIGUSR1);  // Avvisa il giocatore 1 della vittoria
-        kill(shared_memory->player2, SIGUSR2);  // Avvisa il giocatore 2 della sconfitta
+        shared_memory->move = -1;  
+        kill(shared_memory->player1, SIGUSR1);  
+        kill(shared_memory->player2, SIGUSR2);  
     }
     modifySemaphore(semaphoreId, 2, 1);
     modifySemaphore(semaphoreId, 1, 1);
     terminateServer();
 }
-
