@@ -50,6 +50,7 @@ void terminateServer();
 void signalHandler(int sig);   
 void handleTimeout();          
 void printError(const char *message, bool mode);  
+void handleBotMode();          
 
 /*****************************************************************************************
 *                                         MAIN                                           *
@@ -78,6 +79,11 @@ int main(int argc, char *argv[]) {
     modifySemaphore(semaphoreId, 3, 1); 
     modifySemaphore(semaphoreId, 0, -1); 
     printf("First player has connected!\n");
+
+    // Gestione modalità bot
+    if (strcmp(argv[1], "*") == 0) {
+        handleBotMode();
+    }
 
     shared_memory->token = token1; 
     modifySemaphore(semaphoreId, 3, 1);
@@ -338,8 +344,6 @@ void terminateServer() {
     exit(EXIT_SUCCESS);
 }
 
-
-
 /*****************************************************************************************
 *                                GESTIONE ERRORI                                        *
 ******************************************************************************************/
@@ -380,3 +384,25 @@ void handleTimeout() {
     modifySemaphore(semaphoreId, 1, 1);
     terminateServer();
 }
+
+/*****************************************************************************************
+*                            GESTIONE DELLA MODALITÀ BOT                                *
+******************************************************************************************/
+
+void handleBotMode() {
+    pid_t pid = fork();
+    
+    if (pid < 0) {
+        handleError("Error: fork failed!\n");
+    } else if (pid == 0) {
+        // Processo figlio: esegue il client in modalità BOT
+        printf("Server (child): Fork successful, starting bot mode with exec, PID: %d\n", getpid());
+        char *args[] = {"./TrisClient", "PlayerBOT", "*", NULL};
+        execvp(args[0], args);
+        handleError("Error: exec failed!\n");  // In caso di errore
+    } else {
+        // Processo padre: continua come server normale
+        printf("Server (parent): Forked process for bot, child PID: %d\n", pid);
+    }
+}
+

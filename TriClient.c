@@ -73,21 +73,9 @@ int main(int argc, char *argv[]) {
     }
 
     if (argc == 3 && strcmp(argv[2], "*") == 0) {
-        // Creazione di un processo figlio per il bot
-        pid_t pid = fork();
-
-        if (pid < 0) {
-            handleError("Error: fork failed!\n");
-        } else if (pid == 0) {
-            // Processo figlio - Bot
-            isBot = true;
-            printf("Bot mode activated. Playing automatically...\n");
-            srand(time(NULL));  // Inizializza il generatore di numeri casuali
-        } else {
-            // Processo padre - Continua come client normale
-            //printf("Bot process started with PID: %d\n", pid);
-            exit(EXIT_SUCCESS);  // Termina il processo padre dopo aver avviato il bot
-        }
+        isBot = true;
+        printf("Client: Bot mode activated after exec, PID: %d\n", getpid());
+        srand(time(NULL));  // Inizializza il generatore di numeri casuali
     }
 
     if (signal(SIGUSR2, signalHandler) == SIG_ERR || signal(SIGINT, signalHandler) == SIG_ERR || signal(SIGUSR1, signalHandler) == SIG_ERR || signal(SIGTERM, signalHandler) == SIG_ERR) {
@@ -149,7 +137,7 @@ void playGame() {
         system("clear");    
         printBoard();      
 
-        if (isBot && ((player == 1 && shared_memory->token == 'X') || (player == 2 && shared_memory->token == 'O'))) {
+        if (isBot) {
             makeRandomMove();  // Il bot fa una mossa casuale
         } else {
             makeMove();  // Mossa manuale per il giocatore umano
