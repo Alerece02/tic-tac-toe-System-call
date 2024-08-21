@@ -85,7 +85,7 @@ int main(int argc, char *argv[]) {
             srand(time(NULL));  // Inizializza il generatore di numeri casuali
         } else {
             // Processo padre - Continua come client normale
-            printf("Bot process started with PID: %d\n", pid);
+            //printf("Bot process started with PID: %d\n", pid);
             exit(EXIT_SUCCESS);  // Termina il processo padre dopo aver avviato il bot
         }
     }
