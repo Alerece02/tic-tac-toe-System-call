@@ -1,23 +1,21 @@
-# Definizione dei nomi dei file sorgente
-SRCS_SERVER = TriServer.c
-SRCS_CLIENT = TriClient.c
+# Makefile per il progetto TRIS
 
-# Definizione dei nomi degli eseguibili
-TARGET_SERVER = TriServer
-TARGET_CLIENT = TriClient
-
-# Opzioni del compilatore
+# Variabili
 CC = gcc
-CFLAGS = -Wall -Wextra -O2
+CFLAGS = -Wall -Wextra -std=c99
+TARGETS = TriServer TriClient
 
-# Regola per costruire l'eseguibile del server
-$(TARGET_SERVER): $(SRCS_SERVER)
-	$(CC) $(CFLAGS) -o $(TARGET_SERVER) $(SRCS_SERVER)
+# Regole di compilazione
+all: $(TARGETS)
 
-# Regola per costruire l'eseguibile del client
-$(TARGET_CLIENT): $(SRCS_CLIENT)
-	$(CC) $(CFLAGS) -o $(TARGET_CLIENT) $(SRCS_CLIENT)
+TriServer: TriServer.c
+	$(CC) $(CFLAGS) -o TriServer TriServer.c
 
-# Regola di pulizia
+TriClient: TriClient.c
+	$(CC) $(CFLAGS) -o TriClient TriClient.c
+
+# Regole di pulizia
 clean:
-	rm -f $(TARGET_SERVER) $(TARGET_CLIENT)
+	rm -f $(TARGETS)
+
+.PHONY: all clean
