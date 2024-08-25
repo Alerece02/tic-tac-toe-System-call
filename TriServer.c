@@ -8,8 +8,8 @@ int sharedMemoryId;
 int timeout;
 
 void initializeBoard();
-void establishConnection();
-void switchTurnAndSymbol(char symbol1, char symbol2);
+void connection();
+void switchTurn(char symbol1, char symbol2);
 void placeSymbol();
 int checkGameStatus();
 void terminateServer();
@@ -30,7 +30,7 @@ int main(int argc, char *argv[]) {
         printError("Error: You have entered two identical symbols!\n", false);
     }
 
-    establishConnection();  
+    connection();  
     initializeBoard();      
 
     shared_memory->symbol = symbol1;  
@@ -61,7 +61,7 @@ int main(int argc, char *argv[]) {
         placeSymbol();  
         gameStatus = checkGameStatus();  
         if (gameStatus == 0) {
-            switchTurnAndSymbol(symbol1, symbol2);  
+            switchTurn(symbol1, symbol2);  
         }
     } 
 
@@ -96,7 +96,7 @@ void initializeBoard() {
     shared_memory->serverPid = getpid();
 }
 
-void establishConnection() {
+void connection() {
     connectToSharedMemory(&shared_memory, &sharedMemoryId);
 
     registerSignal(SIGUSR2, signalHandler);
@@ -120,7 +120,7 @@ void establishConnection() {
         handleError("Error: semctl failed!");
 }
 
-void switchTurnAndSymbol(char symbol1, char symbol2) {
+void switchTurn(char symbol1, char symbol2) {
     if (isTurnPlayer1) {
         modifySemaphore(semaphoreId, 2, 1);
     } else {
@@ -214,27 +214,6 @@ void handleTimeout() {
     terminateServer();
 }
 
-void handleBotMode() {
-    if (shared_memory->isBotMode) {
-        
-        switch (fork()) {
-            case -1:
-                perror("Error: couldn't create the bot process");
-                exit(EXIT_FAILURE);
-            case 0: {
-                printf("Server (child): Fork successful, starting bot mode with exec, PID: %d\n", getpid());
-                char *args[] = {"./TriClient", "Bot", "BOTMODE", NULL};
-                execvp(args[0], args);
-                perror("Error: exec failed");
-                exit(EXIT_FAILURE);
-            }
-            default:
-                
-                shared_memory->isBotMode = false;
-                break;
-        }
-    }
-}
 
 void signalHandler(int sig) {
     switch (sig) { 
@@ -280,5 +259,27 @@ void signalHandler(int sig) {
                 terminateServer();
             }
             break;
+    }
+}
+
+void handleBotMode() {
+    if (shared_memory->isBotMode) {
+        
+        switch (fork()) {
+            case -1:
+                perror("Error: couldn't create the bot process");
+                exit(EXIT_FAILURE);
+            case 0: {
+                printf("Server (child): Fork successful, starting bot mode with exec, PID: %d\n", getpid());
+                char *args[] = {"./TriClient", "Bot", "BOTMODE", NULL};
+                execvp(args[0], args);
+                perror("Error: exec failed");
+                exit(EXIT_FAILURE);
+            }
+            default:
+                
+                shared_memory->isBotMode = false;
+                break;
+        }
     }
 }

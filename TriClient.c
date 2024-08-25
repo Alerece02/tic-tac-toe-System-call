@@ -10,28 +10,25 @@ bool isBot = false;
 
 void initializeSemaphores();
 void closeClient();
-void makeMove();
-void makeRandomMove();
-void waitForTurn();
+void move();
+void randomMove();
+void waitTurn();
 void playGame();
 void printBoard();
 void endGame();
 void signalHandler(int sig);
 
 int main(int argc, char *argv[]) {
-    for (int i = 0; i < argc; i++) {
-        // Possibile aggiunta di codice per gestire gli argomenti in futuro
-    }
 
     if (argc < 2 || argc > 3) {
-        printError("Errore di utilizzo: ./TriClient <playerName> [BOTMODE]\n", false);
+        printError("Error usage: ./TriClient <playerName> [BOTMODE]\n", false);
     }
 
     char playerName[MAX_PLAYER_NAME];
     strncpy(playerName, argv[1], MAX_PLAYER_NAME);
 
-    if (strlen(playerName) > 100) {
-        printError("Error: il nome usato è troppo lungo MAX CHARACTERS 30!\n", false);
+    if (strlen(playerName) > 30) {
+        printError("Error: name is too long! max name is 30!\n", false);
     }
 
     if (argc == 3 && strcmp(argv[2], "*") == 0) {
@@ -47,7 +44,7 @@ int main(int argc, char *argv[]) {
 
     if (argc == 3 && strcmp(argv[2], "BOTMODE") == 0) {
         isBot = true;
-        printf("Client: Bot mode activated with BOTMODE keyword, PID: %d\n", getpid());
+        printf("Client: Bot mode activated with BOTMODE");
         srand(time(NULL));
     }
 
@@ -78,7 +75,6 @@ int main(int argc, char *argv[]) {
     if (shared_memory->playerCount == 1) {
         player = 1;
         shared_memory->player1 = getpid();
-        printf("Your symbol is '%c'\nWaiting for another player to join...\n", shared_memory->symbol);
         modifySemaphore(semaphoreId, 0, 1);
         modifySemaphore(semaphoreId, 3, 1);
         modifySemaphore(semaphoreId, 1, -1);
@@ -86,7 +82,6 @@ int main(int argc, char *argv[]) {
     } else { 
         player = 2;
         shared_memory->player2 = getpid();
-        printf("Your symbol is '%c'\nThe game begins!\nWaiting for the first player's move...\n", shared_memory->symbol);
         printBoard();
         modifySemaphore(semaphoreId, 0, 1);
         modifySemaphore(semaphoreId, 1, 1);
@@ -105,11 +100,11 @@ void playGame() {
         system("clear");
         printBoard();
         if (isBot) {
-            makeRandomMove();
+            randomMove();
         } else {
-            makeMove();
+            move();
         }
-        waitForTurn();
+        waitTurn();
     }
 }
 
@@ -146,29 +141,29 @@ void printBoard() {
     printf("\n");
 }
 
-void makeMove() {
+void move() {
     int pos;
     bool invalidMove = false;
 
     do {
-        printf("Giocatore %d (%c), è il tuo turno!\n", player, shared_memory->symbol);
-        printf("Inserisci la tua mossa (1-9), dove:\n");
+        printf("Player %d (%c), it's your turn!\n", player, shared_memory->symbol);
+        printf("Insert a number (1-9), where:\n");
         printf(" 1 | 2 | 3 \n---+---+---\n 4 | 5 | 6 \n---+---+---\n 7 | 8 | 9\n\n");
-        printf("Posizione: ");
+        printf("Position: ");
         
         if (scanf("%d", &pos) != 1) {
             invalidMove = true;
             while (getchar() != '\n');  // Pulisce il buffer
-            printf("Input non valido! Per favore inserisci un numero tra 1 e 9.\n");
+            printf("Invalid input! Please insert a number between 1 and 9.\n");
         } else {
             if (pos <= 0 || pos > 9) {
-                printf("Mossa non valida! Inserisci un numero tra 1 e 9.\n");
+                printf("Invalid move! Insert a number between 1 and 9.\n");
                 invalidMove = true;
             } else {
                 int row = (pos - 1) / 3;
                 int col = (pos - 1) % 3;
                 if (shared_memory->grid[row][col] != ' ') {
-                    printf("Questa posizione è già occupata. Scegline un'altra!\n");
+                    printf("This position is already filled. Choose another!\n");
                     invalidMove = true;
                 } else {
                     shared_memory->move = pos - 1;
@@ -179,7 +174,7 @@ void makeMove() {
     } while (invalidMove);
 }
 
-void makeRandomMove() {
+void randomMove() {
     int pos;
     bool invalidMove = false;
 
@@ -200,7 +195,7 @@ void makeRandomMove() {
     printf("Bot placed a symbol at position %d\n", pos);
 }
 
-void waitForTurn() {
+void waitTurn() {
     system("clear");
     printf("Move made: %d\n", shared_memory->move + 1);
     printf("Waiting for the other player to make a move...\n");

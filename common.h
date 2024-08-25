@@ -18,7 +18,7 @@
 #define SEM_KEY 2210
 #define MAX_PLAYER_NAME 30
 
-// Definizione della struttura dati
+
 struct GameBoard {
     char grid[3][3];
     char symbol;
@@ -38,4 +38,4 @@ void connectToSharedMemory(struct GameBoard **shared_memory, int *sharedMemoryId
 void detachSharedMemory(struct GameBoard *shared_memory);
 void registerSignal(int sig, void (*handler)(int));
 
-#endif // COMMON_H
+#endif 
