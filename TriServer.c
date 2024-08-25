@@ -1,91 +1,51 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdbool.h>
-#include <unistd.h>
-#include <string.h>
-#include <signal.h>
-#include <errno.h>
-#include <sys/types.h>
-#include <sys/ipc.h>
-#include <sys/shm.h>
-#include <sys/sem.h>
-
-#define SHM_KEY 1303
-#define SEM_KEY 2210
-
-/*****************************************************************************************
-*                                  STRUCTURE E VARIABILI GLOBALI                          *
-******************************************************************************************/
-
-struct GameBoard {
-    char grid[3][3];        
-    char token;             
-    int playerCount;        
-    int move;               
-    pid_t player1;          
-    pid_t player2;          
-    pid_t serverPid;        
-};
+#include "common.h"
 
 struct GameBoard *shared_memory;
+bool isTurnPlayer1 = true;
+bool signalStatus = true;
+int semaphoreId;
+int sharedMemoryId;
+int timeout;
 
-bool isTurnPlayer1 = true;  
-bool signalStatus = true;   
-int semaphoreId;            
-int sharedMemoryId;         
-int timeout;                
-
-/*****************************************************************************************
-*                                DICHIARAZIONE DELLE FUNZIONI                             *
-******************************************************************************************/
-
-void initializeBoard();        
-void establishConnection();    
-void handleError(const char *message);  
-void modifySemaphore(int semid, unsigned short sem_num, short sem_op);  
-void switchTurnAndToken(char token1, char token2);  
-void placeToken();             
-int checkGameStatus();         
-void terminateServer();        
-void signalHandler(int sig);   
-void handleTimeout();          
-void printError(const char *message, bool mode);  
-void handleBotMode();          
-
-/*****************************************************************************************
-*                                         MAIN                                           *
-******************************************************************************************/
+void initializeBoard();
+void establishConnection();
+void switchTurnAndSymbol(char symbol1, char symbol2);
+void placeSymbol();
+int checkGameStatus();
+void terminateServer();
+void handleTimeout();
+void handleBotMode();
+void signalHandler(int sig);
 
 int main(int argc, char *argv[]) {
-
     if (argc != 4) {
-        printError("Usage error: ./TrisServer <timeout> <token1> <token2>\n", false);
+        printError("Usage error: ./TrisServer <timeout> <symbol1> <symbol2>\n", false);
     }
 
     timeout = atoi(argv[1]);
-    char token1 = *argv[2];
-    char token2 = *argv[3];
+    char symbol1 = *argv[2];
+    char symbol2 = *argv[3];
 
-    if (token1 == token2) {
-        printError("Error: You have entered two identical tokens!\n", false);
+    if (symbol1 == symbol2) {
+        printError("Error: You have entered two identical symbols!\n", false);
     }
 
     establishConnection();  
     initializeBoard();      
 
-    shared_memory->token = token1;  
+    shared_memory->symbol = symbol1;  
+    shared_memory->isBotMode = false;
 
     printf("Waiting for the first player to connect...\n");
-    modifySemaphore(semaphoreId, 3, 1); 
-    modifySemaphore(semaphoreId, 0, -1); 
+    modifySemaphore(semaphoreId, 3, 1);
+    modifySemaphore(semaphoreId, 0, -1);
     printf("First player has connected!\n");
 
-    // Gestione modalità bot
-    if (strcmp(argv[1], "*") == 0) {
+    if (shared_memory->isBotMode) {
         handleBotMode();
     }
 
-    shared_memory->token = token1; 
+    shared_memory->symbol = symbol1; 
     modifySemaphore(semaphoreId, 3, 1);
     printf("Waiting for the second player to connect...\n");
     modifySemaphore(semaphoreId, 0, -1);
@@ -98,10 +58,10 @@ int main(int argc, char *argv[]) {
         alarm(timeout);  
         modifySemaphore(semaphoreId, 0, -1);  
         alarm(0);  
-        placeToken();  
+        placeSymbol();  
         gameStatus = checkGameStatus();  
         if (gameStatus == 0) {
-            switchTurnAndToken(token1, token2);  
+            switchTurnAndSymbol(symbol1, symbol2);  
         }
     } 
 
@@ -111,10 +71,10 @@ int main(int argc, char *argv[]) {
     } else {
         if (isTurnPlayer1) {
             shared_memory->move = -1;
-            printf("Player '%c' wins!\n", token1);
+            printf("Player '%c' wins!\n", symbol1);
         } else {  
             shared_memory->move = -2;
-            printf("Player '%c' wins!\n", token2);
+            printf("Player '%c' wins!\n", symbol2);
         }
     }
 
@@ -125,10 +85,6 @@ int main(int argc, char *argv[]) {
     terminateServer();    
 }
 
-/*****************************************************************************************
-*                                INIZIALIZZAZIONE CAMPO                                  *
-******************************************************************************************/
-
 void initializeBoard() {
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
@@ -136,30 +92,18 @@ void initializeBoard() {
         }
     }
 
-    shared_memory->playerCount = 0;  
-    if ((shared_memory->serverPid = getpid()) == -1) {
-        handleError("Error: getpid failed!");
-    }
+    shared_memory->playerCount = 0;  // Inizializza playerCount a 0
+    shared_memory->serverPid = getpid();
 }
 
-/*****************************************************************************************
-*                                 CONNESSIONE AL SERVER                                  *
-******************************************************************************************/
-
 void establishConnection() {
-    sharedMemoryId = shmget(SHM_KEY, sizeof(struct GameBoard), IPC_EXCL | IPC_CREAT | 0666);
-    if (sharedMemoryId == -1) {
-        printError("Error: shmget failed!\n", true);
-    }
+    connectToSharedMemory(&shared_memory, &sharedMemoryId);
 
-    shared_memory = (struct GameBoard*)shmat(sharedMemoryId, NULL, 0);
-    if (shared_memory == (struct GameBoard *)-1) {
-        printError("Error: shmat failed!\n", true);
-    }
-
-    if (signal(SIGUSR2, signalHandler) == SIG_ERR || signal(SIGINT, signalHandler) == SIG_ERR || signal(SIGUSR1, signalHandler) == SIG_ERR || signal(SIGTERM, signalHandler) == SIG_ERR || signal(SIGALRM, signalHandler) == SIG_ERR) {
-        printError("Error: Signal initialization failed!", true);
-    }
+    registerSignal(SIGUSR2, signalHandler);
+    registerSignal(SIGINT, signalHandler);
+    registerSignal(SIGUSR1, signalHandler);
+    registerSignal(SIGTERM, signalHandler);
+    registerSignal(SIGALRM, signalHandler);
 
     unsigned short semInitVal[] = {0, 0, 0, 0};
     union semun {
@@ -176,105 +120,126 @@ void establishConnection() {
         handleError("Error: semctl failed!");
 }
 
-/*****************************************************************************************
-*                                  MODIFICA DEI SEMAFORI                                 *
-******************************************************************************************/
-
-void modifySemaphore(int semid, unsigned short sem_num, short sem_op) {
-    struct sembuf sop = {.sem_num = sem_num, .sem_op = sem_op, .sem_flg = 0};
-    bool interrupted = false;
-
-    while (semop(semid, &sop, 1) == -1 && errno == EINTR) {
-        interrupted = true;
-    }
-
-    if (errno != EINTR && interrupted) {
-        handleError("Error: semop failed");
-    }
-}
-
-/*****************************************************************************************
-*                                CAMBIO TURNO E TOKEN                                   *
-******************************************************************************************/
-
-void switchTurnAndToken(char token1, char token2) {
+void switchTurnAndSymbol(char symbol1, char symbol2) {
     if (isTurnPlayer1) {
-        modifySemaphore(semaphoreId, 2, 1);  
+        modifySemaphore(semaphoreId, 2, 1);
     } else {
-        modifySemaphore(semaphoreId, 1, 1);  
+        modifySemaphore(semaphoreId, 1, 1);
     }
-    isTurnPlayer1 = !isTurnPlayer1;  
-    shared_memory->token = isTurnPlayer1 ? token1 : token2;  
+    isTurnPlayer1 = !isTurnPlayer1;
+    shared_memory->symbol = isTurnPlayer1 ? symbol1 : symbol2;
 }
 
-/*****************************************************************************************
-*                                 INSERIMENTO DEL TOKEN                                  *
-******************************************************************************************/
-
-void placeToken() {
+void placeSymbol() {
     int pos = shared_memory->move;  
     int row = pos / 3;  
     int col = pos % 3;  
 
     if (shared_memory->grid[row][col] == ' ') {
-        shared_memory->grid[row][col] = shared_memory->token;
-        printf("Player '%c' made a move at [%d, %d]\n", shared_memory->token, row + 1, col + 1);
+        shared_memory->grid[row][col] = shared_memory->symbol;
+        printf("Player '%c' made a move at [%d, %d]\n", shared_memory->symbol, row + 1, col + 1);
     } else {
         printf("Invalid move! The position is already taken.\n");
     }
 }
 
-/*****************************************************************************************
-*                                 CONTROLLO DELLO STATO                                  *
-******************************************************************************************/
-
 int checkGameStatus() {
-
-    // Controllo righe e colonne per una vittoria
     for (int i = 0; i < 3; i++) {
-        if (shared_memory->grid[i][0] == shared_memory->token &&
-            shared_memory->grid[i][1] == shared_memory->token &&
-            shared_memory->grid[i][2] == shared_memory->token) {
-            return 1;  // Vittoria
+        if (shared_memory->grid[i][0] == shared_memory->symbol &&
+            shared_memory->grid[i][1] == shared_memory->symbol &&
+            shared_memory->grid[i][2] == shared_memory->symbol) {
+            return 1;
         }
 
-        if (shared_memory->grid[0][i] == shared_memory->token &&
-            shared_memory->grid[1][i] == shared_memory->token &&
-            shared_memory->grid[2][i] == shared_memory->token) {
-            return 1;  // Vittoria
+        if (shared_memory->grid[0][i] == shared_memory->symbol &&
+            shared_memory->grid[1][i] == shared_memory->symbol &&
+            shared_memory->grid[2][i] == shared_memory->symbol) {
+            return 1;
         }
     }
 
-    // Controllo le diagonali per una vittoria
-    if ((shared_memory->grid[0][0] == shared_memory->token &&
-         shared_memory->grid[1][1] == shared_memory->token &&
-         shared_memory->grid[2][2] == shared_memory->token) ||
-        (shared_memory->grid[0][2] == shared_memory->token &&
-         shared_memory->grid[1][1] == shared_memory->token &&
-         shared_memory->grid[2][0] == shared_memory->token)) {
-        return 1;  // Vittoria
+    if ((shared_memory->grid[0][0] == shared_memory->symbol &&
+         shared_memory->grid[1][1] == shared_memory->symbol &&
+         shared_memory->grid[2][2] == shared_memory->symbol) ||
+        (shared_memory->grid[0][2] == shared_memory->symbol &&
+         shared_memory->grid[1][1] == shared_memory->symbol &&
+         shared_memory->grid[2][0] == shared_memory->symbol)) {
+        return 1;
     }
 
-    // Controllo se c'è ancora spazio per giocare
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             if (shared_memory->grid[i][j] == ' ') {
-                return 0;  // Gioco ancora in corso
+                return 0;
             }
         }
     }
 
-    return 2;  // Pareggio
+    return 2;
 }
 
-/*****************************************************************************************
-*                               GESTORE DEI SEGNALI                                     *
-******************************************************************************************/
+void terminateServer() {
+    if (shared_memory->playerCount > 0) {
+        kill(shared_memory->player1, SIGUSR1);
+        if (shared_memory->playerCount > 1) {
+            kill(shared_memory->player2, SIGUSR1);
+        }
+    }
+
+    detachSharedMemory(shared_memory);
+
+    if (shmctl(sharedMemoryId, IPC_RMID, NULL) == -1)
+        handleError("Error: shmctl failed!\n");
+
+    if (semctl(semaphoreId, 0, IPC_RMID, 0) == -1)
+        handleError("Error: semctl failed!\n");
+
+    printf("Game over.\n");
+    exit(EXIT_SUCCESS);
+}
+
+void handleTimeout() {
+    printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->symbol);
+    if (isTurnPlayer1) {
+        shared_memory->move = -2;
+        kill(shared_memory->player2, SIGUSR1);
+        kill(shared_memory->player1, SIGUSR2);
+    } else {
+        shared_memory->move = -1;
+        kill(shared_memory->player1, SIGUSR1);
+        kill(shared_memory->player2, SIGUSR2);
+    }
+    modifySemaphore(semaphoreId, 2, 1);
+    modifySemaphore(semaphoreId, 1, 1);
+    terminateServer();
+}
+
+void handleBotMode() {
+    if (shared_memory->isBotMode) {
+        
+        switch (fork()) {
+            case -1:
+                perror("Error: couldn't create the bot process");
+                exit(EXIT_FAILURE);
+            case 0: {
+                printf("Server (child): Fork successful, starting bot mode with exec, PID: %d\n", getpid());
+                char *args[] = {"./TriClient", "Bot", "BOTMODE", NULL};
+                execvp(args[0], args);
+                perror("Error: exec failed");
+                exit(EXIT_FAILURE);
+            }
+            default:
+                
+                shared_memory->isBotMode = false;
+                break;
+        }
+    }
+}
 
 void signalHandler(int sig) {
     switch (sig) { 
         case SIGALRM:
-            handleTimeout();  
+            handleTimeout();
             break;
         case SIGTERM:
         case SIGINT:
@@ -317,92 +282,3 @@ void signalHandler(int sig) {
             break;
     }
 }
-
-/*****************************************************************************************
-*                                TERMINAZIONE DEL SERVER                                *
-******************************************************************************************/
-
-void terminateServer() {
-    if (shared_memory->playerCount > 0) {
-        kill(shared_memory->player1, SIGUSR1); // Invia il segnale di terminazione al primo player
-        if (shared_memory->playerCount > 1) {
-            kill(shared_memory->player2, SIGUSR1); // Invia il segnale di terminazione al secondo player
-        }
-    }
-
-    if (shmdt(shared_memory) == -1) {
-        handleError("Error: shmdt failed!\n");
-    }
-
-    if (shmctl(sharedMemoryId, IPC_RMID, NULL) == -1)
-        handleError("Error: shmctl failed!\n");
-
-    if (semctl(semaphoreId, 0, IPC_RMID, 0) == -1)
-        handleError("Error: semctl failed!\n");
-
-    printf("Game over.\n");
-    exit(EXIT_SUCCESS);
-}
-
-/*****************************************************************************************
-*                                GESTIONE ERRORI                                        *
-******************************************************************************************/
-
-void printError(const char *message, bool mode) {
-    if (mode) {
-        perror(message);
-        exit(EXIT_SUCCESS);
-    } else {
-        printf("%s", message);
-        exit(EXIT_SUCCESS);
-    }
-}
-
-void handleError(const char *message) {
-    perror(message);
-    kill(shared_memory->player1, SIGUSR2);
-    kill(shared_memory->player2, SIGUSR2);
-    terminateServer();
-}
-
-/*****************************************************************************************
-*                              GESTIONE DEL TIMEOUT                                     *
-******************************************************************************************/
-
-void handleTimeout() {
-    printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->token);
-    if (isTurnPlayer1) {
-        shared_memory->move = -2;  // Giocatore 2 vince
-        kill(shared_memory->player2, SIGUSR1);  
-        kill(shared_memory->player1, SIGUSR2);  
-    } else {
-        shared_memory->move = -1;  
-        kill(shared_memory->player1, SIGUSR1);  
-        kill(shared_memory->player2, SIGUSR2);  
-    }
-    modifySemaphore(semaphoreId, 2, 1);
-    modifySemaphore(semaphoreId, 1, 1);
-    terminateServer();
-}
-
-/*****************************************************************************************
-*                            GESTIONE DELLA MODALITÀ BOT                                *
-******************************************************************************************/
-
-void handleBotMode() {
-    pid_t pid = fork();
-    
-    if (pid < 0) {
-        handleError("Error: fork failed!\n");
-    } else if (pid == 0) {
-        // Processo figlio: esegue il client in modalità BOT
-        printf("Server (child): Fork successful, starting bot mode with exec, PID: %d\n", getpid());
-        char *args[] = {"./TrisClient", "PlayerBOT", "*", NULL};
-        execvp(args[0], args);
-        handleError("Error: exec failed!\n");  // In caso di errore
-    } else {
-        // Processo padre: continua come server normale
-        printf("Server (parent): Forked process for bot, child PID: %d\n", pid);
-    }
-}
-
