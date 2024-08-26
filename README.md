@@ -65,7 +65,8 @@ Esempio:
 **./TriClient** Giovanna "*"
 
 **Cosa succede?** Il processo client corrente si chiuderà, ma avrà già informato il server, tramite una variabile condivisa, che dovrà essere creato un processo figlio. Questo processo figlio utilizzerà la funzione execvp per sostituire il proprio codice con una nuova istanza del client in modalità BOTMODE.
-Quindi per giocare, basta ora aprire un'altra finestra del terminale e collegarsi utilizzando, ad esempio: 
+Quindi per giocare, basta ora aprire un'altra finestra del terminale e collegarsi utilizzando, ad esempio:
+
 **./TriClient** Giovanna
 
 ## Funzionamento del Gioco
@@ -81,6 +82,19 @@ Quindi per giocare, basta ora aprire un'altra finestra del terminale e collegars
 **5. Timeout**: Se un giocatore non fa una mossa entro il tempo specificato dal timeout, l'altro giocatore vince automaticamente.
 
 **6. Interruzione del Gioco**: Il server o i client possono essere interrotti in qualsiasi momento utilizzando Ctrl+C. Il server gestirà la terminazione notificando i client e liberando le risorse condivise. Una singola pressione di Ctrl+C sul server non lo terminerà immediatamente,  ma necessiterà di una doppia pressione. Nei client invece ne basterà solo una.
+
+## Script BASH
+Per velocizzare il processo di testing è presente un script bash che apre in automatico i terminali (GNOME terminal). Verrà stampato un menù dove è possibile selezionare la funzione da voler testare. Nelle opzioni dove è richiesto un input umano comunque dovrete continuare voi.
+Prima di testarlo controllate se il file è eseguibile con: 
+
+ls -l test.sh
+se non lo fosse basterà digitare:
+
+chmod +x test.sh
+
+dopodichè:
+
+./test.sh
 
 ## Pulizia
 
