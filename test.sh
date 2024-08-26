@@ -1,7 +1,5 @@
 #!/bin/bash
 
-# Script valido solo sul terminale di default di ubuntu!
-
 # Compilazione del progetto
 make
 
@@ -11,8 +9,10 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+echo " "
 # Menu per la scelta del test
 echo "Seleziona il test da eseguire:"
+echo " "
 echo "1) Server con due client umani"
 echo "2) Server con un client umano e uno in modalità bot"
 echo "3) Server con due client bot"
@@ -57,8 +57,7 @@ case $choice in
         echo "Avvio server, e client(fork) e client bot..."
         gnome-terminal -- bash -c "cd '$PWD'; ./TriServer 30 X O; exec bash"
         sleep 2
-        gnome-terminal -- bash -c "cd '$PWD'; ./TriClient Bot '*'; exec bash"
-        gnome-terminal -- bash -c "cd '$PWD'; ./TriClient Bot BOTMODE; exec bash"
+        gnome-terminal -- bash -c "cd '$PWD'; ./TriClient Bot '*'; sleep 2; ./TriClient Bot BOTMODE; exec bash"
         ;;
 
     *)
