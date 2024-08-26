@@ -1,4 +1,4 @@
-# Progetto TRIS
+# MANUALE DEL GIOCO TRIS
 
 ## Descrizione
 
@@ -46,7 +46,7 @@ Per collegare un client (giocatore umano), eseguire il comando:
 
 Esempio:
 
-**./TriClient** Alice
+**./TriClient** Giovanna
 
 ## 3. Modalità Bot
 
@@ -62,7 +62,11 @@ Esempio:
 
 **./TriClient** < playerName > "*"
 
-**./TriClient** Alice "*"
+**./TriClient** Giovanna "*"
+
+**Cosa succede?** Il processo client corrente si chiuderà, ma avrà già informato il server, tramite una variabile condivisa, che dovrà essere creato un processo figlio. Questo processo figlio utilizzerà la funzione execvp per sostituire il proprio codice con una nuova istanza del client in modalità BOTMODE.
+Quindi per giocare, basta ora aprire un'altra finestra del terminale e collegarsi utilizzando, ad esempio: 
+**./TriClient** Giovanna
 
 ## Funzionamento del Gioco
 
@@ -76,7 +80,7 @@ Esempio:
 
 **5. Timeout**: Se un giocatore non fa una mossa entro il tempo specificato dal timeout, l'altro giocatore vince automaticamente.
 
-**6. Interruzione del Gioco**: Il server o i client possono essere interrotti in qualsiasi momento utilizzando Ctrl+C. Il server gestirà la terminazione notificando i client e liberando le risorse condivise.
+**6. Interruzione del Gioco**: Il server o i client possono essere interrotti in qualsiasi momento utilizzando Ctrl+C. Il server gestirà la terminazione notificando i client e liberando le risorse condivise. Una singola pressione di Ctrl+C sul server non lo terminerà immediatamente,  ma necessiterà di una doppia pressione. Nei client invece ne basterà solo una.
 
 ## Pulizia
 
