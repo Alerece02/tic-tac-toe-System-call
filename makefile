@@ -1,20 +1,18 @@
 # Makefile per il progetto TRIS
 
-# Variabili
 CC = gcc
-CFLAGS = -Wall -Wextra -std=c99
+CFLAGS = -Wall -Wextra -std=c99 -Wno-implicit-function-declaration
 TARGETS = TriServer TriClient
+COMMON_SRC = common.c
 
-# Regole di compilazione
 all: $(TARGETS)
 
-TriServer: TriServer.c
-	$(CC) $(CFLAGS) -o TriServer TriServer.c
+TriServer: TriServer.c $(COMMON_SRC) common.h
+	$(CC) $(CFLAGS) -o TriServer TriServer.c $(COMMON_SRC)
 
-TriClient: TriClient.c
-	$(CC) $(CFLAGS) -o TriClient TriClient.c
+TriClient: TriClient.c $(COMMON_SRC) common.h
+	$(CC) $(CFLAGS) -o TriClient TriClient.c $(COMMON_SRC)
 
-# Regole di pulizia
 clean:
 	rm -f $(TARGETS)
 
