@@ -92,7 +92,7 @@ void initializeBoard() {
         }
     }
 
-    shared_memory->playerCount = 0;  // Inizializza playerCount a 0
+    shared_memory->playerCount = 0;  
     shared_memory->serverPid = getpid();
 }
 
@@ -198,8 +198,27 @@ void terminateServer() {
     exit(EXIT_SUCCESS);
 }
 
+void handleTimeout() {
+    printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->symbol);
+    if (isTurnPlayer1) {
+        shared_memory->move = -2;
+        kill(shared_memory->player2, SIGUSR1);
+        kill(shared_memory->player1, SIGUSR2);
+    } else {
+        shared_memory->move = -1;
+        kill(shared_memory->player1, SIGUSR1);
+        kill(shared_memory->player2, SIGUSR2);
+    }
+    modifySemaphore(semaphoreId, 2, 1);
+    modifySemaphore(semaphoreId, 1, 1);
+    terminateServer();
+}
+
 
 void signalHandler(int sig) {
+    
+    registerSignal(SIGINT, signalHandler);
+
     switch (sig) { 
         case SIGALRM:
             handleTimeout();
@@ -209,24 +228,23 @@ void signalHandler(int sig) {
             if (signalStatus) {
                 printf("Press Ctrl + C again to terminate the game!\n");
                 signalStatus = false;
-            } else {
-                if (shared_memory->playerCount == 0) {
+            } else if (shared_memory->playerCount == 0) {
+                printf("Forcing server shutdown!\n");
+                terminateServer();
+
+                } else if (shared_memory->playerCount == 1) {
+                    kill(shared_memory->player1, SIGUSR2);
                     printf("Forcing server shutdown!\n");
                     terminateServer();
-                } else {
-                    if (shared_memory->playerCount == 1) {
-                        kill(shared_memory->player1, SIGUSR2);
-                        printf("Forcing server shutdown!\n");
-                        terminateServer();
+
                     } else {
                         kill(shared_memory->player1, SIGUSR2);
                         kill(shared_memory->player2, SIGUSR2);
                         printf("The game was forcibly terminated.\n");
                         terminateServer();
-                    }
-                }
-            }
+                    }     
             break;
+
         case SIGUSR1:
             if (shared_memory->playerCount == 0) {
                 terminateServer();
@@ -247,6 +265,7 @@ void signalHandler(int sig) {
 }
 
 void handleBotMode() {
+    
     if (shared_memory->isBotMode) {
         
         switch (fork()) {
@@ -266,53 +285,4 @@ void handleBotMode() {
                 break;
         }
     }
-
-
-    if (shmdt(shared_memory) == -1) {
-        handleError("Error: shmdt failed!\n");
-    }
-
-    if (shmctl(sharedMemoryId, IPC_RMID, NULL) == -1)
-        handleError("Error: shmctl failed!\n");
-
-    if (semctl(semaphoreId, 0, IPC_RMID, 0) == -1)
-        handleError("Error: semctl failed!\n");
-
-    printf("Game over.\n");
-    exit(EXIT_SUCCESS);
-}
-
-
-void printError(const char *message, bool mode) {
-    if (mode) {
-        perror(message);
-        exit(EXIT_SUCCESS);
-    } else {
-        printf("%s", message);
-        exit(EXIT_SUCCESS);
-    }
-}
-
-void handleError(const char *message) {
-    perror(message);
-    kill(shared_memory->player1, SIGUSR2);
-    kill(shared_memory->player2, SIGUSR2);
-    terminateServer();
-}
-
-
-void handleTimeout() {
-    printf("Timeout! Player '%c' took too long. The other player wins by default.\n", shared_memory->symbol);
-    if (isTurnPlayer1) {
-        shared_memory->move = -2;
-        kill(shared_memory->player2, SIGUSR1);
-        kill(shared_memory->player1, SIGUSR2);
-    } else {
-        shared_memory->move = -1;
-        kill(shared_memory->player1, SIGUSR1);
-        kill(shared_memory->player2, SIGUSR2);
-    }
-    modifySemaphore(semaphoreId, 2, 1);
-    modifySemaphore(semaphoreId, 1, 1);
-    terminateServer();
 }
