@@ -1,3 +1,5 @@
+
+
 #include "common.h"
 
 struct GameBoard *shared_memory;
@@ -133,10 +135,10 @@ void printBoard() {
     for (int i = 0; i < 3; i++) {
         for (int j = 0; j < 3; j++) {
             printf(" %c ", shared_memory->grid[i][j]);
-            if (j < 2) printf("|");  // Linea verticale di separazione
+            if (j < 2) printf("|");  
         }
         printf("\n");
-        if (i < 2) printf("---+---+---\n");  // Linea orizzontale di separazione
+        if (i < 2) printf("---+---+---\n");  
     }
     printf("\n");
 }
@@ -153,7 +155,7 @@ void move() {
         
         if (scanf("%d", &pos) != 1) {
             invalidMove = true;
-            while (getchar() != '\n');  // Pulisce il buffer
+            while (getchar() != '\n');  
             printf("Invalid input! Please insert a number between 1 and 9.\n");
         } else {
             if (pos <= 0 || pos > 9) {
@@ -215,28 +217,39 @@ void initializeSemaphores() {
 }
 
 void closeClient() {
-    modifySemaphore(semaphoreId, 3, -1);  // Lock
+    
+    modifySemaphore(semaphoreId, 3, -1);  
 
     if (shared_memory != NULL) {
         if (shared_memory->playerCount > 0) {
             shared_memory->playerCount--;
         }
     }
-
-    // Non rilasciare il semaforo se il client è in modalità bot
+    
     if (shared_memory != NULL && shared_memory->playerCount == 0 && noError) {
         modifySemaphore(semaphoreId, 0, 1);
     }
 
-    modifySemaphore(semaphoreId, 3, 1);  // Unlock
+    modifySemaphore(semaphoreId, 3, 1); 
     
     exit(EXIT_SUCCESS);
 }
 
 void signalHandler(int sig) {
-    switch (sig) {
-        case SIGTERM:
+    switch (sig) {      
         case SIGINT:
+            if(player == 1) {
+                printf("\nYou left the game.\n");
+                kill(shared_memory->serverPid, SIGUSR1);      
+                closeClient();
+            }else{
+            	if(player == 2){
+		        printf("\nYou left the game.\n");
+		        kill(shared_memory->serverPid, SIGUSR2);
+		        closeClient();
+            }
+            }
+            break;
         case SIGUSR1:
             printf("\nThe game has ended. Exiting...\n");
             closeClient();
@@ -248,27 +261,3 @@ void signalHandler(int sig) {
             break;
     }
 }
-
-
-void printError(const char *message, bool mode) {
-    if (mode) {
-        perror(message);
-        exit(EXIT_SUCCESS);
-    } else {
-        printf("%s\n", message);
-        exit(EXIT_SUCCESS);
-    }
-}
-
-void handleError(const char *message) { 
-    perror(message);
-
-    if (player == 1) {
-        kill(shared_memory->serverPid, SIGUSR1);
-    } else {
-        kill(shared_memory->serverPid, SIGUSR2);
-    }
-
-    closeClient();
-}
-
