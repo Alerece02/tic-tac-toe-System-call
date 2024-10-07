@@ -1,5 +1,3 @@
-
-
 #include "common.h"
 
 struct GameBoard *shared_memory;
